@@ -1,19 +1,53 @@
 import os
 import logging
+import threading
+import time
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 # ===== НАСТРОЙКИ =====
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "123456789"))
+PORT = int(os.environ.get("PORT", 10000))
 
 # ===== ЛОГИРОВАНИЕ =====
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+logger = logging.getLogger(__name__)
 
-# ===== ОБРАБОТЧИКИ =====
+# ===== HTTP СЕРВЕР ДЛЯ KEEP-ALIVE =====
+class KeepAliveHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b'Bot is alive!')
+    
+    def log_message(self, format, *args):
+        pass  # Отключаем логи HTTP
+
+def run_keep_alive():
+    """Запускает HTTP сервер для пингов"""
+    server = HTTPServer(('0.0.0.0', PORT), KeepAliveHandler)
+    logger.info(f"🌐 Keep-alive server running on port {PORT}")
+    server.serve_forever()
+
+# ===== ФУНКЦИЯ ДЛЯ САМОПИНГА =====
+def self_ping():
+    """Пингует себя каждые 5 минут"""
+    import requests
+    url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'localhost')}"
+    while True:
+        try:
+            response = requests.get(url, timeout=5)
+            logger.info(f"📡 Self-ping: {response.status_code}")
+        except Exception as e:
+            logger.error(f"❌ Self-ping failed: {e}")
+        time.sleep(300)  # 5 минут
+
+# ===== ОБРАБОТЧИКИ БОТА =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Привет! Это бот для анонимных сообщений Матвею.\n\n"
@@ -123,7 +157,17 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['reply_to_user'] = None
     await update.message.reply_text("✅ Отменено.")
 
+# ===== ЗАПУСК =====
 def main():
+    # 1. Запускаем HTTP сервер
+    thread_http = threading.Thread(target=run_keep_alive, daemon=True)
+    thread_http.start()
+    
+    # 2. Запускаем самопинг (каждые 5 минут)
+    thread_ping = threading.Thread(target=self_ping, daemon=True)
+    thread_ping.start()
+    
+    # 3. Запускаем бота
     app = Application.builder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
@@ -132,7 +176,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
     
-    print("🤖 Бот запущен!")
+    logger.info("🤖 Бот запущен и будет работать 24/7!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
