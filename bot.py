@@ -26,17 +26,15 @@ class KeepAliveHandler(BaseHTTPRequestHandler):
         self.wfile.write(b'Bot is alive!')
     
     def log_message(self, format, *args):
-        pass  # Отключаем логи HTTP
+        pass
 
 def run_keep_alive():
-    """Запускает HTTP сервер для пингов"""
     server = HTTPServer(('0.0.0.0', PORT), KeepAliveHandler)
     logger.info(f"🌐 Keep-alive server running on port {PORT}")
     server.serve_forever()
 
 # ===== ФУНКЦИЯ ДЛЯ САМОПИНГА =====
 def self_ping():
-    """Пингует себя каждые 5 минут"""
     import requests
     url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME', 'localhost')}"
     while True:
@@ -45,13 +43,14 @@ def self_ping():
             logger.info(f"📡 Self-ping: {response.status_code}")
         except Exception as e:
             logger.error(f"❌ Self-ping failed: {e}")
-        time.sleep(300)  # 5 минут
+        time.sleep(300)
 
 # ===== ОБРАБОТЧИКИ БОТА =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Привет! Это бот для анонимных сообщений Матвею.\n\n"
-        "📩 Напиши любое сообщение, и оно уйдет ему."
+        "🚀 Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку.\n\n"
+        "⚡️ Напишите сюда всё, что хотите ему передать, и через несколько секунд он получит ваше сообщение, но не будет знать от кого.\n\n"
+        "«Отправить можно: текст, фото, видео, стикеры, голосовые и видеосообщения (кружки)»"
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -159,15 +158,12 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ===== ЗАПУСК =====
 def main():
-    # 1. Запускаем HTTP сервер
     thread_http = threading.Thread(target=run_keep_alive, daemon=True)
     thread_http.start()
     
-    # 2. Запускаем самопинг (каждые 5 минут)
     thread_ping = threading.Thread(target=self_ping, daemon=True)
     thread_ping.start()
     
-    # 3. Запускаем бота
     app = Application.builder().token(BOT_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
